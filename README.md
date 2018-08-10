@@ -1,13 +1,6 @@
 # Amazon AWS EKS and RDS PostgreSQL with terraform
 
-This is the second part of the 3 part  series article on how to use terraform to deploy on Cloud providers Kubernetes offerings. In previous [Article](https://medium.com/@mudrii/google-gke-and-sql-with-terraform-294fb840619d) I showed how you can deploy complete kubernetes setup on [Google Cloud GKE](https://cloud.google.com/kubernetes-engine/) and [PostgreSQL](https://www.postgresql.org/) google sql offering.
-In this Article I will show how can you deploy [Amazon AWS EKS](https://aws.amazon.com/eks/) and RDS with terraform.
-As AWS EKS is most recent service Amazon AWS cloud provider that adopted GKE Managed Kubernetes, be aware about the additional cost of  $0.20 per hour for the EKS Control Plane "Kubernetes Master", and usual EC2, EBS,etc prices for resources that run in your account.
-As comparing EKS with GKE is not so strait forward to deploy and configure requires more moving pieces like setting up AWS launch configuration and AWS autoscaling group and in addition IAM roles and policy to allow AWS to manage EKS.
-
-```text
-NOTE: This tutorial is not secured and is not production ready
-```
+Assuming you already have Amazon AWS account we will need additional binaries for AWS CLI, terraform, kubectland aws-iam-authenticator. 
 
 **Article is structured in 5 parts**
 
@@ -26,7 +19,8 @@ Assuming you already have AWS account and [AWS CLI installed](https://docs.aws.a
 #### terraform for OS X
 
 ```sh
-curl -o terraform_0.11.7_darwin_amd64.zip https://releases.hashicorp.com/terraform/0.11.7/terraform_0.11.7_darwin_amd64.zip
+curl -o terraform_0.11.7_darwin_amd64.zip \
+https://releases.hashicorp.com/terraform/0.11.7/terraform_0.11.7_darwin_amd64.zip
 
 unzip terraform_0.11.7_linux_amd64.zip -d /usr/local/bin/
 ```
@@ -34,7 +28,8 @@ unzip terraform_0.11.7_linux_amd64.zip -d /usr/local/bin/
 #### terraform for Linux
 
 ```sh
-curl https://releases.hashicorp.com/terraform/0.11.7/terraform_0.11.7_linux_amd64.zip > terraform_0.11.7_linux_amd64.zip
+curl https://releases.hashicorp.com/terraform/0.11.7/terraform_0.11.7_linux_amd64.zip > \
+terraform_0.11.7_linux_amd64.zip
 
 unzip terraform_0.11.7_linux_amd64.zip -d /usr/local/bin/
 ```
@@ -77,7 +72,7 @@ kubectl version --client
 
 ### Deploying aws-iam-authenticator
 
-[aws-iam-authenticator](https://github.com/kubernetes-sigs/aws-iam-authenticator) is a tool developed by [Heptio](https://heptio.com/) Team and this tool will allow us to manage eks by using kubectl
+[aws-iam-authenticator](https://github.com/kubernetes-sigs/aws-iam-authenticator) is a tool developed by [Heptio](https://heptio.com/) Team and this tool will allow us to manage EKS by using kubectl
 
 #### aws-iam-authenticator for OS X
 
@@ -109,7 +104,7 @@ aws-iam-authenticator help
 
 ### Authenticate to AWS
 
-Before configuring AWS CLI as GKE at this time is only available in US East (N. Virginia) and US West (Oregon)
+Before configuring AWS CLI as EKS at this time is only available in US East (N. Virginia) and US West (Oregon)
 In below example we will be using US West (Oregon) "us-west-2"
 
 ```sh
@@ -118,7 +113,7 @@ aws configure
 
 ## Creating terraform IAM account with access keys and access policy
 
-### 1nd step is to setup Terraform Admin account in AWS IAM
+1st step is to setup terraform admin account in AWS IAM
 
 ### Create IAM terraform User
 
@@ -128,9 +123,8 @@ aws iam create-user --user-name terraform
 
 ### Add to newly created terraform user IAM admin policy
 
-```text
-NOTE: For production or event proper testing account you may need tighten up and restrict acces for terraform IAM user
-```
+> NOTE: For production or event proper testing account you may need tighten up and restrict access for terraform IAM user
+
 
 ```sh
 aws iam attach-user-policy --user-name terraform --policy-arn arn:aws:iam::aws:policy/AdministratorAccess
@@ -138,9 +132,7 @@ aws iam attach-user-policy --user-name terraform --policy-arn arn:aws:iam::aws:p
 
 ### Create access keys for the user
 
-```text
-NOTE: This Access Key and Secret Access Key will be used by terraform to manage infrastructure creation
-```
+> NOTE: This Access Key and Secret Access Key will be used by terraform to manage infrastructure deployment
 
 ```sh
 aws iam create-access-key --user-name terraform
@@ -156,9 +148,7 @@ Once we have terraform IAM account created we can proceed to next step creating 
 
 ### Create terraform state bucket
 
-```text
-NOTE: Change name of the bucker, name should be unique across all AWS S3 buckets
-```
+> NOTE: Change name of the bucker, name should be unique across all AWS S3 buckets
 
 ```sh
 aws s3 mb s3://terra-state-bucket --region us-west-2
@@ -177,54 +167,54 @@ aws s3api put-bucket-versioning --bucket terra-state-bucket --versioning-configu
 Now we can move into creating new infrastructure, eks and rds with terraform
 
 ```sh
-.
-├── backend.tf
-├── eks
-│   ├── eks_cluster
-│   │   ├── main.tf
-│   │   ├── outputs.tf
-│   │   └── variables.tf
-│   ├── eks_iam_roles
-│   │   ├── main.tf
-│   │   └── outputs.tf
-│   ├── eks_node
-│   │   ├── main.tf
-│   │   ├── outputs.tf
-│   │   ├── userdata.tpl
-│   │   └── variables.tf
-│   └── eks_sec_group
-│       ├── main.tf
-│       ├── outputs.tf
-│       └── variables.tf
-├── main.tf
-├── network
-│   ├── route
-│   │   ├── main.tf
-│   │   ├── outputs.tf
-│   │   └── variables.tf
-│   ├── sec_group
-│   │   ├── main.tf
-│   │   ├── outputs.tf
-│   │   └── variables.tf
-│   ├── subnets
-│   │   ├── main.tf
-│   │   ├── outputs.tf
-│   │   └── variables.tf
-│   └── vpc
-│       ├── main.tf
-│       ├── outputs.tf
-│       └── variables.tf
-├── outputs.tf
-├── rds
-│   ├── main.tf
-│   ├── outputs.tf
-│   └── variables.tf
-├── README.md
-├── terraform.tfvars
-├── variables.tf
-└── yaml
-    ├── eks-admin-cluster-role-binding.yaml
-    └── eks-admin-service-account.yaml
+    .
+    ├── backend.tf
+    ├── eks
+    │   ├── eks_cluster
+    │   │   ├── main.tf
+    │   │   ├── outputs.tf
+    │   │   └── variables.tf
+    │   ├── eks_iam_roles
+    │   │   ├── main.tf
+    │   │   └── outputs.tf
+    │   ├── eks_node
+    │   │   ├── main.tf
+    │   │   ├── outputs.tf
+    │   │   ├── userdata.tpl
+    │   │   └── variables.tf
+    │   └── eks_sec_group
+    │       ├── main.tf
+    │       ├── outputs.tf
+    │       └── variables.tf
+    ├── main.tf
+    ├── network
+    │   ├── route
+    │   │   ├── main.tf
+    │   │   ├── outputs.tf
+    │   │   └── variables.tf
+    │   ├── sec_group
+    │   │   ├── main.tf
+    │   │   ├── outputs.tf
+    │   │   └── variables.tf
+    │   ├── subnets
+    │   │   ├── main.tf
+    │   │   ├── outputs.tf
+    │   │   └── variables.tf
+    │   └── vpc
+    │       ├── main.tf
+    │       ├── outputs.tf
+    │       └── variables.tf
+    ├── outputs.tf
+    ├── rds
+    │   ├── main.tf
+    │   ├── outputs.tf
+    │   └── variables.tf
+    ├── README.md
+    ├── terraform.tfvars
+    ├── variables.tf
+    └── yaml
+        ├── eks-admin-cluster-role-binding.yaml
+        └── eks-admin-service-account.yaml
 ```
 
 We will use terraform modules to keep our code clean and organized
@@ -340,9 +330,7 @@ Terraform modules will create
 * Security group for RDS
 * RDS with PostgreSQL
 
-```text
-NOTE: very important to keep tags as if tags is not specify nodes will not be able to join cluster
-```
+> NOTE: very important to keep tags as if tags is not specify nodes will not be able to join cluster
 
 ### Initial setup create and create new workspace for terraform
 
@@ -365,7 +353,6 @@ terraform workspace new dev
 ```sh
 terraform workspace list
 ```
-
 #### Select dev workspace
 
 ```sh
@@ -394,33 +381,12 @@ terraform plan
 
 ### Apply terraform plan
 
-```text
-NOTE: building complete infrastructure may take more than 10 minutes.
-```
+> NOTE: building complete infrastructure may take more than 10 minutes.
 
 ```sh
 terraform apply
 ```
 
-
-### Apply terraform only for VPC and Subnet creation
-
-```sh
-terraform plan -target=module.vpc -target=module.subnets
-terraform apply -target=module.vpc -target=module.subnets -auto-approve
-```
-
-### Export 2nd plan that will include routes rds security groups and eks
-
-```sh
-terraform plan
-```
-
-### Apply terraform for remaining routes, db eks etc.
-
-```sh
-terraform apply -auto-approve
-```
 [![asciicast](https://asciinema.org/a/195802.png)](https://asciinema.org/a/195802)
 
 ### Verify instance creation
@@ -435,9 +401,7 @@ aws ec2 describe-instances --output table
 
 In order to use kubectl with EKS we need to set new AWS CLI profile
 
-```text
-NOTE: will need to use secret and access keys from terrafom.tfvrs
-```
+> NOTE: will need to use secret and access keys from terraform.tfvars
 
 ```sh
 cat terraform.tfvars
@@ -541,13 +505,9 @@ kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | gre
 kubectl proxy
 ```
 
-```text
-NOTE: Open the link with a web browser to access the dashboard endpoint: http://localhost:8001/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy/
-```
+> NOTE: Open the link with a web browser to access the dashboard endpoint: http://localhost:8001/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy/
 
-```text
-NOTE: Choose Token and paste output from the previous command into the Token field
-```
+> NOTE: Choose Token and paste output from the previous command into the Token field
 
 [![asciicast](https://asciinema.org/a/195823.png)](https://asciinema.org/a/195823)
 
@@ -584,5 +544,3 @@ aws iam delete-access-key --user-name terraform --access-key-id OUT_KEY
 
 aws iam delete-user --user-name terraform
 ```
-
-Terraform and kubernetes sources can be found in [GitHub](https://github.com/mudrii/eks_rds_terraform)
